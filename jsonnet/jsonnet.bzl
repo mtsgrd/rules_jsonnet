@@ -55,6 +55,19 @@ def _add_prefix_to_imports(label, imports):
         imports_prefix += label.package + "/"
     return [imports_prefix + im for im in imports]
 
+def _get_genfiles_path(ctx):
+    """Returns genfiles path for workspace root.
+    
+    Returns regular genfiles path if rule is in user workspace, otherwise
+    the same location suffixed by external/workspace_name. This allows
+    jsonnet files to use genfiles even when executed in an external
+    workspace.
+    """
+    imports_prefix = ""
+    if ctx.label.workspace_root:
+        imports_prefix += ctx.label.workspace_root + "/"
+    return ctx.genfiles_dir.path + '/' + imports_prefix
+
 def _setup_deps(deps):
     """Collects source files and import flags of transitive dependencies.
 
@@ -182,9 +195,12 @@ def _jsonnet_to_json_impl(ctx):
             "set -e;",
             toolchain.jsonnet_path,
         ] + ["-J %s" % im for im in _add_prefix_to_imports(ctx.label, ctx.attr.imports)] +
+        # Required for being able to compile jsonnet files with imports when when executed
+        # in an external workspace.
+        (["-J %s" % ctx.label.workspace_root] if ctx.label.workspace_root else []) +
         ["-J %s" % im for im in depinfo.imports.to_list()] + [
             "-J .",
-            "-J %s" % ctx.genfiles_dir.path,
+            "-J %s" % _get_genfiles_path(ctx),
             "-J %s" % ctx.bin_dir.path,
         ] + yaml_stream_arg +
         ["--ext-str %s=%s" %
